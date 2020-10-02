@@ -1,0 +1,72 @@
+function [D, residuals, D_hist, coef_hist] = K_SVD_multi(data, D0, niter, L)
+
+D = D0;
+residuals = [];
+D_hist = {};
+coef_hist = {};
+
+for iiter=1:niter
+    fprintf('%s --- K-SVD iter %2d',  datestr(now, 'yy-mm-dd HH:MM:SS'), iiter);
+
+    param.L = L;
+    %coef = mexOMP(data, D, param);
+    for i = 1:size(data, 2)  % 3rd dimension  = channels
+       coef1(:,:,i) = greed_somp_qr(squeeze(data(:,i,:)), D, size(D,2), 'stopCrit', 'M','stopTol',L);
+    end
+    coef = permute(coef1, [1 3 2]);
+    %residuals(iiter) = norm(data - D*coef,'fro');      
+    residuals(iiter) = sqrt(sum(sum(sum((data - mult3(D,coef)).^2))));      
+    
+    fprintf(', residual = %g\n', residuals(iiter));
+    
+    % Compute residual matrix
+    %R = data - D*coef;
+    R = data - mult3(D, coef);
+    
+    % Coordinate descent - update each atom one by one
+    for i = 1:size(D,2)
+
+        % Keep contribution of current atom
+        %Rcurr = R + D(:,i)*coef(i,:); % 
+        Rcurr = R + mult3(D(:,i), coef(i,:,:)); % 
+        
+        % Restrict R to the data having the current atom in the support
+        %Rcurr = Rcurr(:, coef(i,:) ~= 0);
+        Rcurr = Rcurr(:, coef(i,:,1) ~= 0, :);  % coef has same sparsity structure on all channels, so we can look at (:,:,1) only
+        Rcurrmat = reshape(Rcurr, size(Rcurr,1), []);  % reshape as matrix. Assumes all channels have same weight
+                        
+        if (size(Rcurrmat,2) > 0)
+            % SVD
+            [U,~,~] = svd(Rcurrmat,'econ');
+            D(:,i) = U(:,1);
+        end
+    end
+    
+    % Save history
+    D_hist{iiter} = D;
+    coef_hist{iiter} = coef;
+
+    %========================================
+    % Replace unused atoms
+    %unused_atoms = find(sum(abs(coef),2) == 0);
+    %used_atoms = find(sum(abs(coef),2) ~= 0);
+    %median_norm = median(sqrt(sum(D(:,used_atoms).^2)));
+    fprintf('%s --- --- Replacing %d unused atoms\n',  datestr(now, 'yy-mm-dd HH:MM:SS'), numel(unused_atoms));
+    for i_atom = 1:numel(unused_atoms)
+        i = unused_atoms(i_atom);
+        
+        % Pick a new atom
+        newindex = randi(ndata);
+        newatom = data(:, newindex);
+        % Replace in dict
+        %D(:,i) = newatom / norm(newatom) * median_norm;
+        D(:,i) = newatom / norm(newatom);
+    end    
+    
+end 
+
+function C = mult3(A,B)
+% 3D multiplication A*B
+for i=1:size(B,3)
+    C(:,:,i) = A * B(:,:,i);
+end

@@ -1,0 +1,10 @@
+pdfname = [foldername 'Examplu.pdf'];
+ps = get(gcf, 'Position');
+ratio = (ps(3)-ps(1)) / (ps(4)-ps(2));
+ratio = 1/ratio;
+paperWidth = 30;
+paperHeight = paperWidth*ratio;
+set(gcf, 'paperunits', 'centimeters');
+set(gcf, 'papersize', [paperWidth paperHeight]);
+set(gcf, 'PaperPosition', [0    0   paperWidth paperHeight]);
+print(gcf, '-dpdf', pdfname);
